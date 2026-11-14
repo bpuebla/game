@@ -1,0 +1,25 @@
+{
+  "name": "morti-jamon-quest",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "test": "node --experimental-strip-types --test src/rules.test.ts && node scripts/behavior-tests.cjs",
+    "build:portable": "node scripts/build-portable.mjs",
+    "test:browser": "node scripts/browser-qa.cjs",
+    "test:package": "node scripts/package-check.cjs",
+    "test:runtime": "node scripts/runtime-qa.cjs"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.2.6",
+    "playwright": "^1.51.1",
+    "jsdom": "^26.0.0",
+    "@napi-rs/canvas": "^0.1.80"
+  }
+}

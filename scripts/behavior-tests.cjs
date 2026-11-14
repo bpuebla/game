@@ -1,0 +1,29 @@
+// Exercise the production encounter methods without requiring a graphical browser.
+const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict');
+let source=fs.readFileSync('src/main.ts','utf8');source=source.slice(source.indexOf('class House'),source.indexOf('\nfunction restart'))+'\nglobalThis.TestHouse=House;';
+const rules=ts.transpileModule(fs.readFileSync('src/rules.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;const r={exports:{}};vm.runInNewContext(rules,r);
+function sprite(x=13000){return {x,y:577,rotation:0,anims:{isPlaying:false},body:{velocity:{x:0,y:0},bottom:620,blocked:{down:true}},setVelocityX(n){this.body.velocity.x=n;return this},setVelocity(x,y){this.body.velocity={x,y};return this},setFlipY(v){this.flipY=v;return this},setFlipX(v){this.flip=v;return this},setScale(){return this},setAngle(){return this},stop(){return this},setTexture(){return this},play(){return this},setDepth(){return this}};}
+const context={...r.exports,Phaser:{Scene:class{},Math:{Clamp:(n,a,b)=>Math.max(a,Math.min(b,n))}},URLSearchParams,location:{search:''},setTimeout,clearTimeout,tone(){},toast(){},console};context.globalThis=context;vm.createContext(context);vm.runInContext(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
+function scene(){const s=new context.TestHouse;s.morti=sprite(13000);s.bomb=sprite(13250);s.bossBase={x:1,y:1};s.time={now:1000};s.playTime=1000;s.cameras={main:{shake(){}}};s.updateBossHUD=()=>{};s.add={text:()=>sprite()};s.tweens={add(){}};return s;}
+let count=0;function check(name,fn){fn();count++;console.log('PASS '+name);}
+check('Bomboniel is hidden before the finale',()=>{const s=scene();s.updateBomb(1000);assert.equal(s.chase,'hidden');assert.equal(s.bomb.body.velocity.x,0)});
+check('Pursuit becomes a telegraphed windup',()=>{const s=scene();s.chase='chase';s.updateBomb(1000);assert.equal(s.chase,'windup');assert.equal(s.pounceDir,-1);assert.equal(s.bomb.body.velocity.x,0)});
+check('Pounce commits to the direction chosen during windup',()=>{const s=scene();s.chase='windup';s.pounceDir=-1;s.stateUntil=900;s.morti.x=13400;s.updateBomb(1000);assert.equal(s.chase,'pounce');assert.equal(s.bomb.body.velocity.x,-950)});
+check('A stool crash increments once and enters recovery',()=>{const s=scene();s.chase='pounce';s.pounceDir=-1;s.chargeStartX=13200;s.bomb.x=12880;s.stateUntil=2500;s.updateBomb(1000);assert.equal(s.crashes,1);assert.equal(s.chase,'dizzy');s.updateBomb(1016);assert.equal(s.crashes,1)});
+check('A missed pounce awards no crash',()=>{const s=scene();s.chase='pounce';s.bomb.x=13200;s.stateUntil=900;s.updateBomb(1000);assert.equal(s.crashes,0);assert.equal(s.chase,'dizzy')});
+check('The third crash defeats Bomboniel',()=>{const s=scene();s.chase='pounce';s.crashes=2;s.pounceDir=1;s.chargeStartX=13200;s.bomb.x=13500;s.updateBomb(1000);assert.equal(s.crashes,3);assert.equal(s.chase,'defeated');s.updateBomb(5000);assert.equal(s.chase,'defeated')});
+check('Dizzy Bomboniel recovers to pursue again',()=>{const s=scene();s.chase='dizzy';s.stateUntil=900;s.updateBomb(1000);assert.equal(s.chase,'chase')});
+check('Hidden and defeated Bomboniel cannot hit Morti',()=>{for(const state of ['hidden','defeated','dizzy']){const s=scene();s.chase=state;s.bombHit();assert.equal(s.invulnerable,0)}});
+check('A hit knocks Morti away and grants invulnerability',()=>{const s=scene();s.chase='chase';s.bombHit();assert.equal(s.morti.body.velocity.x,-300);assert.equal(s.morti.body.velocity.y,-250);assert.equal(s.invulnerable,2700);s.morti.body.velocity.x=0;s.bombHit();assert.equal(s.morti.body.velocity.x,0)});
+
+check('Neither stool nor the floor outside the stools can trigger windup',()=>{for(const [x,feet]of [[12830,531],[13550,531],[12700,620],[13700,620]]){const s=scene();s.chase='chase';s.morti.x=x;s.morti.body.bottom=feet;s.updateBomb(1000);assert.equal(s.chase,'chase')}});
+check('Leaving the bait zone during windup cancels the charge',()=>{const s=scene();s.chase='windup';s.stateUntil=900;s.morti.x=13700;s.updateBomb(1000);assert.equal(s.chase,'chase');assert.notEqual(s.bomb.body.velocity.x,950)});
+check('A charge that hits Morti earns no crash point',()=>{const s=scene();s.chase='pounce';s.pounceDir=1;s.chargeStartX=13200;s.bomb.x=13500;s.chargeHitPlayer=true;s.updateBomb(1000);assert.equal(s.crashes,0);assert.equal(s.chase,'dizzy')});
+check('Invulnerability cannot turn camping into free crash points',()=>{const s=scene();s.chase='pounce';s.invulnerable=5000;s.bombHit();assert.equal(s.chargeHitPlayer,true)});
+check('Fast charges detect overshoot beyond the stool collision plane',()=>{const s=scene();s.chase='pounce';s.pounceDir=1;s.chargeStartX=13200;s.bomb.x=13590;s.updateBomb(1000);assert.equal(s.crashes,1)});
+check('Pee flips Morti and launches him in his direction of travel',()=>{const s=scene();s.puddles=[{x:13000,armed:true}];s.morti.body.velocity.x=-200;s.launchFromPuddle(1000);assert.equal(s.morti.flipY,true);assert.equal(s.morti.body.velocity.x,-650);assert.equal(s.skidUntil,2000);assert.equal(s.puddles[0].armed,false)});
+check('An airborne cat does not trigger a puddle',()=>{const s=scene();s.puddles=[{x:13000,armed:true}];s.morti.body.blocked.down=false;s.launchFromPuddle(1000);assert.equal(s.skidUntil,0)});
+check('Each Canelo reverses at his own patrol boundary',()=>{const s=scene();s.canelos=[{sprite:sprite(1600),min:1500,max:1600}];s.canelos[0].sprite.setVelocityX(60);s.updateCanelos();assert.equal(s.canelos[0].sprite.body.velocity.x,-60)});
+check('Pee on the floor cannot flip a cat standing on furniture above it',()=>{const s=scene();s.puddles=[{x:13000,armed:true}];s.morti.body.bottom=520;s.launchFromPuddle(1000);assert.equal(s.skidUntil,0)});
+console.log(`${count} behavior checks passed.`);
+
